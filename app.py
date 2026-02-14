@@ -72,7 +72,6 @@ with tab1:
     pair = st.text_input("Pair", "BTCUSDT")
 
     price = st.number_input("Current Price", value=0.0, format="%.8f")
-
     trend = st.selectbox("Trend", ["Uptrend", "Downtrend"])
 
     hl = st.number_input("Last HL / LH", value=0.0, format="%.8f")
@@ -100,7 +99,7 @@ with tab1:
 
         breakdown = {}
 
-        # ---------- Structure (20)
+        # Structure
         structure = 0
         if trend == "Uptrend":
             structure += 10
@@ -116,7 +115,7 @@ with tab1:
 
         breakdown["Structure"] = structure
 
-        # ---------- Supply-Demand (20)
+        # Supply-Demand
         sd = 0
         if hh != hl:
             swing = abs(hh - hl)
@@ -126,6 +125,7 @@ with tab1:
             elif proximity < 0.75:
                 sd += 5
 
+        range_pos = None
         if high_24 > low_24:
             range_pos = (price - low_24) / (high_24 - low_24)
             if range_pos < 0.9:
@@ -135,7 +135,7 @@ with tab1:
 
         breakdown["SupplyDemand"] = sd
 
-        # ---------- Positioning (20)
+        # Positioning
         positioning = 0
         if oi_trend == "Rising":
             positioning += 7
@@ -150,7 +150,7 @@ with tab1:
 
         breakdown["Positioning"] = positioning
 
-        # ---------- RSI (15)
+        # RSI
         rsi_layer = 0
         if 40 <= rsi <= 65:
             rsi_layer += 5
@@ -159,7 +159,7 @@ with tab1:
 
         breakdown["RSI"] = rsi_layer
 
-        # ---------- Micro (15)
+        # Micro
         micro_score = 0
         if micro == "Strong":
             micro_score = 10
@@ -168,10 +168,9 @@ with tab1:
 
         breakdown["Micro"] = micro_score
 
-        # ---------- Extreme Penalty (10)
+        # Extreme Penalty
         penalty = 0
-        if high_24 > low_24:
-            range_pos = (price - low_24) / (high_24 - low_24)
+        if range_pos is not None:
             if range_pos > 0.9 and rsi > 75:
                 penalty = -10
 
@@ -187,7 +186,7 @@ with tab1:
         else:
             verdict = "🔴 NO-GO"
 
-        # ================= REGIME =================
+        # Regime
         if change_24 > 15 and volume_24 > 50_000_000 and oi_trend == "Rising":
             regime = "High Participation Expansion"
         elif change_24 > 15 and oi_trend == "Rising":
@@ -199,7 +198,7 @@ with tab1:
         else:
             regime = "Normal Environment"
 
-        # ================= EXECUTION =================
+        # Execution
         if trend == "Uptrend":
             entry_low = hl * 1.002
             entry_high = hl * 1.004
@@ -213,7 +212,7 @@ with tab1:
 
         midpoint = (entry_low + entry_high) / 2
 
-        # ================= RISK =================
+        # Risk
         risk_amount = state["equity"] * (state["risk_percent"] / 100)
         risk_per_unit = abs(midpoint - sl)
 
@@ -254,38 +253,42 @@ with tab1:
 
         a = st.session_state.analysis
 
-        st.metric("Composite Score", f"{a['score']} / 100")
-        st.markdown(f"### {a['verdict']}")
+        st.metric("Composite Score", f"{a.get('score', 0)} / 100")
+        st.markdown(f"### {a.get('verdict', '')}")
 
-        with st.expander("Breakdown"):
-            st.write(a["breakdown"])
+        if "breakdown" in a:
+            with st.expander("Breakdown"):
+                st.write(a["breakdown"])
 
-        st.subheader("Regime")
-        st.write(a["regime"])
+        if "regime" in a:
+            st.subheader("Regime")
+            st.write(a["regime"])
 
-        if a["structural_warning"]:
+        if "structural_warning" in a and a["structural_warning"]:
             st.warning(a["structural_warning"])
 
-        st.subheader("Execution Plan")
-        st.write({
-            "Entry Zone": f"{round(a['entry_low'],8)} – {round(a['entry_high'],8)}",
-            "Stop": round(a["sl"],8),
-            "Take Profit": round(a["tp"],8),
-            "R:R": round(a["rr"],2)
-        })
+        if "entry_low" in a:
+            st.subheader("Execution Plan")
+            st.write({
+                "Entry Zone": f"{round(a['entry_low'],8)} – {round(a['entry_high'],8)}",
+                "Stop": round(a["sl"],8),
+                "Take Profit": round(a["tp"],8),
+                "R:R": round(a["rr"],2)
+            })
 
-        st.subheader("Risk Plan (1% / 5x)")
-        st.write({
-            "Risk Amount": round(a["risk_amount"],2),
-            "Position Size": round(a["position_size"],2),
-            "Margin Required": round(a["margin"],2)
-        })
+        if "risk_amount" in a:
+            st.subheader("Risk Plan (1% / 5x)")
+            st.write({
+                "Risk Amount": round(a["risk_amount"],2),
+                "Position Size": round(a["position_size"],2),
+                "Margin Required": round(a["margin"],2)
+            })
 
         r_input = st.number_input("Trade Result (R Multiple)", value=0.0)
 
         if st.button("Save Trade"):
 
-            pnl = a["risk_amount"] * r_input
+            pnl = a.get("risk_amount", 0) * r_input
             state["equity"] += pnl
 
             if r_input < 0:
@@ -297,8 +300,8 @@ with tab1:
             row = pd.DataFrame([{
                 "Date": datetime.now(),
                 "Pair": pair,
-                "Score": a["score"],
-                "Verdict": a["verdict"],
+                "Score": a.get("score", 0),
+                "Verdict": a.get("verdict", ""),
                 "R": r_input,
                 "Equity": state["equity"]
             }])
