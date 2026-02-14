@@ -71,83 +71,36 @@ with tab1:
     # ================= INPUT =================
     pair = st.text_input("Pair", "BTCUSDT")
 
-    price = st.number_input(
-        "Current Price",
-        value=0.0,
-        format="%.8f"
-    )
+    price = st.number_input("Current Price", value=0.0, format="%.8f")
 
     trend = st.selectbox("Trend", ["Uptrend", "Downtrend"])
 
-    hl = st.number_input(
-        "Last HL / LH",
-        value=0.0,
-        format="%.8f"
-    )
-
-    hh = st.number_input(
-        "Last HH / LL",
-        value=0.0,
-        format="%.8f"
-    )
+    hl = st.number_input("Last HL / LH", value=0.0, format="%.8f")
+    hh = st.number_input("Last HH / LL", value=0.0, format="%.8f")
 
     break_confirmed = st.checkbox("Break Confirmed")
 
-    funding = st.number_input(
-        "Funding (%)",
-        value=0.0,
-        format="%.6f"
-    )
-
+    funding = st.number_input("Funding (%)", value=0.0, format="%.6f")
     oi_trend = st.selectbox("OI Trend", ["Rising", "Falling", "Flat"])
+    ls_ratio = st.number_input("L/S Ratio", value=1.0, format="%.3f")
 
-    ls_ratio = st.number_input(
-        "L/S Ratio",
-        value=1.0,
-        format="%.3f"
-    )
+    rsi = st.number_input("RSI (10)", value=50.0, format="%.2f")
 
-    rsi = st.number_input(
-        "RSI (10)",
-        value=50.0,
-        format="%.2f"
-    )
+    high_24 = st.number_input("24h High", value=0.0, format="%.8f")
+    low_24 = st.number_input("24h Low", value=0.0, format="%.8f")
+    change_24 = st.number_input("24h % Change", value=0.0, format="%.2f")
 
-    high_24 = st.number_input(
-        "24h High",
-        value=0.0,
-        format="%.8f"
-    )
-
-    low_24 = st.number_input(
-        "24h Low",
-        value=0.0,
-        format="%.8f"
-    )
-
-    change_24 = st.number_input(
-        "24h % Change",
-        value=0.0,
-        format="%.2f"
-    )
-
-    volume_24_million = st.number_input(
-        "24h Volume (Million USDT)",
-        value=0.0,
-        format="%.2f"
-    )
+    volume_24_million = st.number_input("24h Volume (Million USDT)", value=0.0, format="%.2f")
+    volume_24 = volume_24_million * 1_000_000
 
     micro = st.selectbox("Micro Confirmation", ["None", "Weak", "Strong"])
-
-    # Convert volume to real number
-    volume_24 = volume_24_million * 1_000_000
 
     # ================= ANALYZE =================
     if st.button("Analyze"):
 
         breakdown = {}
 
-        # Structure
+        # ---------- Structure (20)
         structure = 0
         if trend == "Uptrend":
             structure += 10
@@ -163,7 +116,7 @@ with tab1:
 
         breakdown["Structure"] = structure
 
-        # Supply-Demand
+        # ---------- Supply-Demand (20)
         sd = 0
         if hh != hl:
             swing = abs(hh - hl)
@@ -182,7 +135,7 @@ with tab1:
 
         breakdown["SupplyDemand"] = sd
 
-        # Positioning
+        # ---------- Positioning (20)
         positioning = 0
         if oi_trend == "Rising":
             positioning += 7
@@ -197,7 +150,7 @@ with tab1:
 
         breakdown["Positioning"] = positioning
 
-        # RSI
+        # ---------- RSI (15)
         rsi_layer = 0
         if 40 <= rsi <= 65:
             rsi_layer += 5
@@ -206,7 +159,7 @@ with tab1:
 
         breakdown["RSI"] = rsi_layer
 
-        # Micro
+        # ---------- Micro (15)
         micro_score = 0
         if micro == "Strong":
             micro_score = 10
@@ -215,7 +168,7 @@ with tab1:
 
         breakdown["Micro"] = micro_score
 
-        # Extreme penalty
+        # ---------- Extreme Penalty (10)
         penalty = 0
         if high_24 > low_24:
             range_pos = (price - low_24) / (high_24 - low_24)
@@ -234,10 +187,66 @@ with tab1:
         else:
             verdict = "🔴 NO-GO"
 
+        # ================= REGIME =================
+        if change_24 > 15 and volume_24 > 50_000_000 and oi_trend == "Rising":
+            regime = "High Participation Expansion"
+        elif change_24 > 15 and oi_trend == "Rising":
+            regime = "Leverage Driven Expansion"
+        elif abs(change_24) < 5:
+            regime = "Compression / Range"
+        elif funding > 0.05:
+            regime = "Crowded Positioning Risk"
+        else:
+            regime = "Normal Environment"
+
+        # ================= EXECUTION =================
+        if trend == "Uptrend":
+            entry_low = hl * 1.002
+            entry_high = hl * 1.004
+            sl = hl * 0.996
+            tp = hh
+        else:
+            entry_low = hl * 0.998
+            entry_high = hl * 0.996
+            sl = hl * 1.004
+            tp = hh
+
+        midpoint = (entry_low + entry_high) / 2
+
+        # ================= RISK =================
+        risk_amount = state["equity"] * (state["risk_percent"] / 100)
+        risk_per_unit = abs(midpoint - sl)
+
+        if risk_per_unit > 0:
+            position_size = risk_amount / risk_per_unit
+            notional = position_size * midpoint
+            margin = notional / state["leverage"]
+            rr = abs(tp - midpoint) * position_size / risk_amount
+        else:
+            position_size = 0
+            margin = 0
+            rr = 0
+
+        structural_warning = None
+        if trend == "Uptrend" and price > hh:
+            structural_warning = "Price already above previous HH"
+        if trend == "Downtrend" and price < hh:
+            structural_warning = "Price already below previous LL"
+
         st.session_state.analysis = {
             "score": score,
             "verdict": verdict,
-            "breakdown": breakdown
+            "breakdown": breakdown,
+            "regime": regime,
+            "entry_low": entry_low,
+            "entry_high": entry_high,
+            "sl": sl,
+            "tp": tp,
+            "rr": rr,
+            "risk_amount": risk_amount,
+            "position_size": position_size,
+            "margin": margin,
+            "structural_warning": structural_warning
         }
 
     # ================= DISPLAY =================
@@ -251,13 +260,32 @@ with tab1:
         with st.expander("Breakdown"):
             st.write(a["breakdown"])
 
+        st.subheader("Regime")
+        st.write(a["regime"])
+
+        if a["structural_warning"]:
+            st.warning(a["structural_warning"])
+
+        st.subheader("Execution Plan")
+        st.write({
+            "Entry Zone": f"{round(a['entry_low'],8)} – {round(a['entry_high'],8)}",
+            "Stop": round(a["sl"],8),
+            "Take Profit": round(a["tp"],8),
+            "R:R": round(a["rr"],2)
+        })
+
+        st.subheader("Risk Plan (1% / 5x)")
+        st.write({
+            "Risk Amount": round(a["risk_amount"],2),
+            "Position Size": round(a["position_size"],2),
+            "Margin Required": round(a["margin"],2)
+        })
+
         r_input = st.number_input("Trade Result (R Multiple)", value=0.0)
 
         if st.button("Save Trade"):
 
-            risk_amount = state["equity"] * (state["risk_percent"] / 100)
-            pnl = risk_amount * r_input
-
+            pnl = a["risk_amount"] * r_input
             state["equity"] += pnl
 
             if r_input < 0:
