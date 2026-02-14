@@ -68,19 +68,135 @@ with tab1:
 
     st.divider()
 
+    # ================= INPUT =================
     pair = st.text_input("Pair", "BTCUSDT")
-    dummy_input = st.number_input("Dummy Score Input", value=0.0)
+    price = st.number_input("Current Price", value=0.0)
 
+    trend = st.selectbox("Trend", ["Uptrend", "Downtrend"])
+    hl = st.number_input("Last HL / LH", value=0.0)
+    hh = st.number_input("Last HH / LL", value=0.0)
+    break_confirmed = st.checkbox("Break Confirmed")
+
+    funding = st.number_input("Funding (%)", value=0.0)
+    oi_trend = st.selectbox("OI Trend", ["Rising", "Falling", "Flat"])
+    ls_ratio = st.number_input("L/S Ratio", value=1.0)
+
+    rsi = st.number_input("RSI (10)", value=50.0)
+    high_24 = st.number_input("24h High", value=0.0)
+    low_24 = st.number_input("24h Low", value=0.0)
+    change_24 = st.number_input("24h % Change", value=0.0)
+    volume_24 = st.number_input("24h Volume (USDT)", value=0.0)
+
+    micro = st.selectbox("Micro Confirmation", ["None", "Weak", "Strong"])
+
+    # ================= ANALYZE =================
     if st.button("Analyze"):
+
+        breakdown = {}
+
+        # ---------- Structure (20)
+        structure = 0
+        if trend == "Uptrend":
+            structure += 10
+            if price > hl:
+                structure += 5
+        elif trend == "Downtrend":
+            structure += 10
+            if price < hl:
+                structure += 5
+
+        if break_confirmed:
+            structure += 5
+
+        breakdown["Structure"] = structure
+
+        # ---------- Supply-Demand (20)
+        sd = 0
+        if hh != hl:
+            swing = abs(hh - hl)
+            proximity = abs(price - hl) / swing if swing != 0 else 0
+            if proximity < 0.25:
+                sd += 10
+            elif proximity < 0.75:
+                sd += 5
+
+        if high_24 > low_24:
+            range_pos = (price - low_24) / (high_24 - low_24)
+            if range_pos < 0.9:
+                sd += 5
+            else:
+                sd -= 5
+
+        breakdown["SupplyDemand"] = sd
+
+        # ---------- Positioning (20)
+        positioning = 0
+        if oi_trend == "Rising":
+            positioning += 7
+
+        if funding < 0.05:
+            positioning += 5
+        else:
+            positioning -= 5
+
+        if ls_ratio < 1:
+            positioning += 3
+
+        breakdown["Positioning"] = positioning
+
+        # ---------- RSI (15)
+        rsi_layer = 0
+        if 40 <= rsi <= 65:
+            rsi_layer += 5
+        if rsi < 75:
+            rsi_layer += 5
+
+        breakdown["RSI"] = rsi_layer
+
+        # ---------- Micro (15)
+        micro_score = 0
+        if micro == "Strong":
+            micro_score = 10
+        elif micro == "Weak":
+            micro_score = 5
+
+        breakdown["Micro"] = micro_score
+
+        # ---------- Extreme Penalty (10)
+        penalty = 0
+        if high_24 > low_24:
+            range_pos = (price - low_24) / (high_24 - low_24)
+            if range_pos > 0.9 and rsi > 75:
+                penalty = -10
+
+        breakdown["ExtremePenalty"] = penalty
+
+        score = sum(breakdown.values())
+        score = max(min(score, 100), 0)
+
+        if score >= 70:
+            verdict = "🟢 GO"
+        elif score >= 60:
+            verdict = "🟡 Conditional"
+        else:
+            verdict = "🔴 NO-GO"
+
         st.session_state.analysis = {
-            "score": dummy_input,
-            "verdict": "TEST"
+            "score": score,
+            "verdict": verdict,
+            "breakdown": breakdown
         }
 
+    # ================= DISPLAY =================
     if st.session_state.analysis:
 
-        st.metric("Composite Score", st.session_state.analysis["score"])
-        st.markdown("### TEST VERDICT")
+        a = st.session_state.analysis
+
+        st.metric("Composite Score", f"{a['score']} / 100")
+        st.markdown(f"### {a['verdict']}")
+
+        with st.expander("Breakdown"):
+            st.write(a["breakdown"])
 
         r_input = st.number_input("Trade Result (R Multiple)", value=0.0)
 
@@ -90,6 +206,7 @@ with tab1:
             pnl = risk_amount * r_input
 
             state["equity"] += pnl
+
             if r_input < 0:
                 state["daily_loss"] += abs(pnl)
 
@@ -99,8 +216,8 @@ with tab1:
             row = pd.DataFrame([{
                 "Date": datetime.now(),
                 "Pair": pair,
-                "Score": st.session_state.analysis["score"],
-                "Verdict": st.session_state.analysis["verdict"],
+                "Score": a["score"],
+                "Verdict": a["verdict"],
                 "R": r_input,
                 "Equity": state["equity"]
             }])
