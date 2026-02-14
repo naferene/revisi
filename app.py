@@ -99,7 +99,7 @@ with tab1:
 
         breakdown = {}
 
-        # Structure
+        # ================= STRUCTURE =================
         structure = 0
         if trend == "Uptrend":
             structure += 10
@@ -115,11 +115,16 @@ with tab1:
 
         breakdown["Structure"] = structure
 
-        # Supply-Demand
+        # ================= SUPPLY-DEMAND REFINED =================
         sd = 0
-        if hh != hl:
-            swing = abs(hh - hl)
-            proximity = abs(price - hl) / swing if swing != 0 else 0
+        swing = abs(hh - hl)
+
+        range_small = False
+        overextended = False
+        deep_retrace = False
+
+        if swing > 0:
+            proximity = abs(price - hl) / swing
             if proximity < 0.25:
                 sd += 10
             elif proximity < 0.75:
@@ -127,30 +132,78 @@ with tab1:
 
         range_pos = None
         if high_24 > low_24:
-            range_pos = (price - low_24) / (high_24 - low_24)
-            if range_pos < 0.9:
-                sd += 5
-            else:
-                sd -= 5
+            total_range = high_24 - low_24
+            range_pos = (price - low_24) / total_range
+
+            # Minimum Range Filter
+            if total_range / price < 0.01:
+                sd -= 3
+                range_small = True
+
+            if trend == "Uptrend":
+                if 0.30 <= range_pos <= 0.60:
+                    sd += 2
+                if range_pos > 0.80:
+                    sd -= 3
+                    overextended = True
+                if range_pos < 0.10:
+                    sd -= 3
+                    deep_retrace = True
+
+            if trend == "Downtrend":
+                if 0.40 <= range_pos <= 0.70:
+                    sd += 2
+                if range_pos < 0.20:
+                    sd -= 3
+                    overextended = True
+                if range_pos > 0.90:
+                    sd -= 3
+                    deep_retrace = True
 
         breakdown["SupplyDemand"] = sd
 
-        # Positioning
+        # ================= POSITIONING REFINED =================
         positioning = 0
+
         if oi_trend == "Rising":
             positioning += 7
 
-        if funding < 0.05:
-            positioning += 5
-        else:
-            positioning -= 5
+        # Funding tier
+        if trend == "Uptrend":
+            if funding < -0.02:
+                positioning += 5
+            elif -0.02 <= funding <= 0.03:
+                positioning += 2
+            elif funding > 0.05:
+                positioning -= 2
+
+        if trend == "Downtrend":
+            if funding > 0.02:
+                positioning += 5
+            elif -0.03 <= funding <= 0.02:
+                positioning += 2
+            elif funding < -0.05:
+                positioning -= 2
+
+        # OI alignment dampening
+        if funding < 0 and oi_trend == "Falling":
+            positioning -= 2
+
+        if funding > 0 and oi_trend == "Falling":
+            positioning -= 2
+
+        # Price–OI divergence
+        if change_24 > 0 and oi_trend == "Falling":
+            positioning -= 2
+        if change_24 < 0 and oi_trend == "Falling":
+            positioning -= 2
 
         if ls_ratio < 1:
             positioning += 3
 
         breakdown["Positioning"] = positioning
 
-        # RSI
+        # ================= RSI =================
         rsi_layer = 0
         if 40 <= rsi <= 65:
             rsi_layer += 5
@@ -159,16 +212,24 @@ with tab1:
 
         breakdown["RSI"] = rsi_layer
 
-        # Micro
+        # ================= MICRO REFINED =================
         micro_score = 0
         if micro == "Strong":
             micro_score = 10
         elif micro == "Weak":
             micro_score = 5
 
+        # Noise filter
+        if range_small:
+            micro_score = 0
+
+        # Context cap
+        if overextended or deep_retrace or range_small:
+            micro_score = micro_score * 0.5
+
         breakdown["Micro"] = micro_score
 
-        # Extreme Penalty
+        # ================= EXTREME PENALTY =================
         penalty = 0
         if range_pos is not None:
             if range_pos > 0.9 and rsi > 75:
@@ -186,7 +247,7 @@ with tab1:
         else:
             verdict = "🔴 NO-GO"
 
-        # Regime
+        # ================= REGIME =================
         if change_24 > 15 and volume_24 > 50_000_000 and oi_trend == "Rising":
             regime = "High Participation Expansion"
         elif change_24 > 15 and oi_trend == "Rising":
@@ -198,7 +259,7 @@ with tab1:
         else:
             regime = "Normal Environment"
 
-        # Execution
+        # ================= EXECUTION =================
         if trend == "Uptrend":
             entry_low = hl * 1.002
             entry_high = hl * 1.004
@@ -212,7 +273,7 @@ with tab1:
 
         midpoint = (entry_low + entry_high) / 2
 
-        # Risk
+        # ================= RISK =================
         risk_amount = state["equity"] * (state["risk_percent"] / 100)
         risk_per_unit = abs(midpoint - sl)
 
@@ -256,33 +317,29 @@ with tab1:
         st.metric("Composite Score", f"{a.get('score', 0)} / 100")
         st.markdown(f"### {a.get('verdict', '')}")
 
-        if "breakdown" in a:
-            with st.expander("Breakdown"):
-                st.write(a["breakdown"])
+        with st.expander("Breakdown"):
+            st.write(a.get("breakdown", {}))
 
-        if "regime" in a:
-            st.subheader("Regime")
-            st.write(a["regime"])
+        st.subheader("Regime")
+        st.write(a.get("regime", ""))
 
-        if "structural_warning" in a and a["structural_warning"]:
+        if a.get("structural_warning"):
             st.warning(a["structural_warning"])
 
-        if "entry_low" in a:
-            st.subheader("Execution Plan")
-            st.write({
-                "Entry Zone": f"{round(a['entry_low'],8)} – {round(a['entry_high'],8)}",
-                "Stop": round(a["sl"],8),
-                "Take Profit": round(a["tp"],8),
-                "R:R": round(a["rr"],2)
-            })
+        st.subheader("Execution Plan")
+        st.write({
+            "Entry Zone": f"{round(a['entry_low'],8)} – {round(a['entry_high'],8)}",
+            "Stop": round(a["sl"],8),
+            "Take Profit": round(a["tp"],8),
+            "R:R": round(a["rr"],2)
+        })
 
-        if "risk_amount" in a:
-            st.subheader("Risk Plan (1% / 5x)")
-            st.write({
-                "Risk Amount": round(a["risk_amount"],2),
-                "Position Size": round(a["position_size"],2),
-                "Margin Required": round(a["margin"],2)
-            })
+        st.subheader("Risk Plan (1% / 5x)")
+        st.write({
+            "Risk Amount": round(a["risk_amount"],2),
+            "Position Size": round(a["position_size"],2),
+            "Margin Required": round(a["margin"],2)
+        })
 
         r_input = st.number_input("Trade Result (R Multiple)", value=0.0)
 
