@@ -70,31 +70,84 @@ with tab1:
 
     # ================= INPUT =================
     pair = st.text_input("Pair", "BTCUSDT")
-    price = st.number_input("Current Price", value=0.0)
+
+    price = st.number_input(
+        "Current Price",
+        value=0.0,
+        format="%.8f"
+    )
 
     trend = st.selectbox("Trend", ["Uptrend", "Downtrend"])
-    hl = st.number_input("Last HL / LH", value=0.0)
-    hh = st.number_input("Last HH / LL", value=0.0)
+
+    hl = st.number_input(
+        "Last HL / LH",
+        value=0.0,
+        format="%.8f"
+    )
+
+    hh = st.number_input(
+        "Last HH / LL",
+        value=0.0,
+        format="%.8f"
+    )
+
     break_confirmed = st.checkbox("Break Confirmed")
 
-    funding = st.number_input("Funding (%)", value=0.0)
-    oi_trend = st.selectbox("OI Trend", ["Rising", "Falling", "Flat"])
-    ls_ratio = st.number_input("L/S Ratio", value=1.0)
+    funding = st.number_input(
+        "Funding (%)",
+        value=0.0,
+        format="%.6f"
+    )
 
-    rsi = st.number_input("RSI (10)", value=50.0)
-    high_24 = st.number_input("24h High", value=0.0)
-    low_24 = st.number_input("24h Low", value=0.0)
-    change_24 = st.number_input("24h % Change", value=0.0)
-    volume_24 = st.number_input("24h Volume (USDT)", value=0.0)
+    oi_trend = st.selectbox("OI Trend", ["Rising", "Falling", "Flat"])
+
+    ls_ratio = st.number_input(
+        "L/S Ratio",
+        value=1.0,
+        format="%.3f"
+    )
+
+    rsi = st.number_input(
+        "RSI (10)",
+        value=50.0,
+        format="%.2f"
+    )
+
+    high_24 = st.number_input(
+        "24h High",
+        value=0.0,
+        format="%.8f"
+    )
+
+    low_24 = st.number_input(
+        "24h Low",
+        value=0.0,
+        format="%.8f"
+    )
+
+    change_24 = st.number_input(
+        "24h % Change",
+        value=0.0,
+        format="%.2f"
+    )
+
+    volume_24_million = st.number_input(
+        "24h Volume (Million USDT)",
+        value=0.0,
+        format="%.2f"
+    )
 
     micro = st.selectbox("Micro Confirmation", ["None", "Weak", "Strong"])
+
+    # Convert volume to real number
+    volume_24 = volume_24_million * 1_000_000
 
     # ================= ANALYZE =================
     if st.button("Analyze"):
 
         breakdown = {}
 
-        # ---------- Structure (20)
+        # Structure
         structure = 0
         if trend == "Uptrend":
             structure += 10
@@ -110,7 +163,7 @@ with tab1:
 
         breakdown["Structure"] = structure
 
-        # ---------- Supply-Demand (20)
+        # Supply-Demand
         sd = 0
         if hh != hl:
             swing = abs(hh - hl)
@@ -129,7 +182,7 @@ with tab1:
 
         breakdown["SupplyDemand"] = sd
 
-        # ---------- Positioning (20)
+        # Positioning
         positioning = 0
         if oi_trend == "Rising":
             positioning += 7
@@ -144,7 +197,7 @@ with tab1:
 
         breakdown["Positioning"] = positioning
 
-        # ---------- RSI (15)
+        # RSI
         rsi_layer = 0
         if 40 <= rsi <= 65:
             rsi_layer += 5
@@ -153,7 +206,7 @@ with tab1:
 
         breakdown["RSI"] = rsi_layer
 
-        # ---------- Micro (15)
+        # Micro
         micro_score = 0
         if micro == "Strong":
             micro_score = 10
@@ -162,7 +215,7 @@ with tab1:
 
         breakdown["Micro"] = micro_score
 
-        # ---------- Extreme Penalty (10)
+        # Extreme penalty
         penalty = 0
         if high_24 > low_24:
             range_pos = (price - low_24) / (high_24 - low_24)
